@@ -11,8 +11,54 @@ and **macOS (Homebrew)**.
 | OS | Toolchain | Tested |
 |---|---|---|
 | Windows 10/11 | Visual Studio 2022 + [vcpkg](https://vcpkg.io/en/) | yes |
-| Linux (Ubuntu) | g++/clang + [vcpkg](https://vcpkg.io/en/) | no (CI not set up) |
-| **macOS 15+ (Apple Silicon)** | **Homebrew + Apple Clang** | **yes** |
+| **Linux (Ubuntu 24.04)** | **g++ + CMake + apt** | **yes** |
+| macOS 15+ (Apple Silicon) | Homebrew + Apple Clang | yes |
+
+## Quick start — Linux
+
+```bash
+git clone git@github.com:BlurryLight/Mitsuba0.6_CMakeVcpkg.git
+cd Mitsuba0.6_CMakeVcpkg
+./scripts/build-linux.sh
+```
+
+The script installs every build dependency via `apt` (no vcpkg, no manual
+tweaking), configures the CMake project under `./cbuild`, and builds it.
+The renderer binaries land in `cbuild/bin/` and the plugins in
+`cbuild/bin/plugins/`.
+
+Try a render:
+```bash
+./cbuild/bin/mitsuba path/to/scene.xml -o out.exr
+```
+
+The build script accepts the following flags:
+```bash
+./scripts/build-linux.sh --debug     # debug build
+./scripts/build-linux.sh --clean     # wipe cbuild/ before configuring
+./scripts/build-linux.sh --no-apt    # skip the apt install step
+```
+
+### Manual Linux build
+
+If you prefer to drive CMake yourself:
+
+```bash
+sudo apt install -y --no-install-recommends \
+    build-essential cmake ninja-build pkg-config \
+    libboost-filesystem-dev libboost-thread-dev libboost-chrono-dev \
+    libboost-date-time-dev libboost-atomic-dev libboost-python-dev \
+    zlib1g-dev libopenexr-dev libimath-dev \
+    libjpeg-turbo8-dev libpng-dev libxerces-c-dev libglew-dev \
+    libeigen3-dev libfftw3-dev \
+    qtbase5-dev qttools5-dev libqt5xmlpatterns5-dev libqt5opengl5-dev \
+    python3-dev python3-numpy \
+    libx11-dev libxmu-dev libxi-dev libgl-dev libglu1-mesa-dev libxxf86vm-dev
+
+mkdir cbuild && cd cbuild
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release ..
+cmake --build . -j
+```
 
 ## Quick start — macOS
 
@@ -97,6 +143,7 @@ Mitsuba0.6_CMakeVcpkg/
 ├── CMakeLists.txt          # top-level build configuration
 ├── vcpkg.json              # vcpkg dependency manifest
 ├── scripts/
+│   ├── build-linux.sh      # one-shot Linux build (apt + cmake)
 │   └── build-macos.sh      # one-shot macOS build (brew + cmake)
 ├── src/                    # sources (core lib, plugins, CLI tools)
 ├── include/mitsuba/        # public headers

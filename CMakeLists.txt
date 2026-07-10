@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.15) # Required for reliable vcpkg and modern CM
 
 project(Mitsuba)
 
+# --- Local CMake module path -------------------------------------------------
+# Bundled Find<Package>.cmake modules let this project build with system
+# (apt) packages, not just vcpkg/brew provided ones. Insert BEFORE the
+# first find_package() call below.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -56,8 +62,8 @@ find_package(XercesC REQUIRED)
 find_package(PNG REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(FFTW3 CONFIG REQUIRED)
-find_package(FFTW3f CONFIG REQUIRED)
+find_package(FFTW3 REQUIRED)
+# FFTW3f (single-precision) is found by the same FindFFTW3.cmake module above.
 
 # --- FFTW3 imported targets (vcpkg provides these; Homebrew's package does not) ---
 if(NOT TARGET FFTW3::fftw3)
@@ -158,7 +164,7 @@ elseif(APPLE)
     set(GL_LIB_LIST "-framework OpenGL" "-framework Cocoa" "-framework IOKit" GLEW::glew)
 else()
     set(BASE_LIB_LIST Eigen3::Eigen pthread)
-    set(GL_LIB_LIST GL GLEW::glew GLU X11)
+    set(GL_LIB_LIST GL GLEW::glew GLU X11 Xxf86vm)
 endif()
 set(QT_LIB_LIST Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml Qt5::Network Qt5::OpenGL Qt5::XmlPatterns)
 set(OPENEXR_LIB_LIST OpenEXR::OpenEXR)
@@ -167,6 +173,28 @@ set(JEPG_LIB_LIST libjpeg-turbo::jpeg)
 set(XERCES_LIB_LIST XercesC::XercesC)
 set(PNG_LIB_LIST PNG::PNG)
 set(FFTW_LIB_LIST FFTW3::fftw3f FFTW3::fftw3)
+
+# --- FFTW3 threads support (needed for fftw_init_threads etc.) -------------
+# vcpkg's FFTW3Config.cmake transitively links the threads flavour, but
+# Homebrew/apt do not — resolve the threads library explicitly.
+if(NOT APPLE AND NOT WIN32)
+    find_library(FFTW3_THREADS_LIB
+        NAMES fftw3_threads
+        HINTS "${FFTW3_LIBRARY_DIRS}" "${FFTW3f_LIBRARY_DIRS}"
+        PATH_SUFFIXES lib lib64
+    )
+    if(FFTW3_THREADS_LIB)
+        list(APPEND FFTW_LIB_LIST "${FFTW3_THREADS_LIB}")
+    endif()
+endif()
+
+# --- OpenMP linkage ---------------------------------------------------------
+# MITSUBA_OPENMP_LIBS is set by the find_package(OpenMP) block above, but the
+# executables and shared libraries need the runtime in their link line as
+# well. Append it to BASE_LIB_LIST so every subdirectory picks it up.
+if(MITSUBA_OPENMP_LIBS)
+    list(APPEND BASE_LIB_LIST ${MITSUBA_OPENMP_LIBS})
+endif()
 
 
 # --- Core targets ---

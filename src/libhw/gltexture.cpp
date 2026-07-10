@@ -19,11 +19,14 @@
 #include <mitsuba/mitsuba.h>
 #if defined(__OSX__)
 #include <OpenGL/glew.h>
-#else
+#elif defined(__WINDOWS__)
 #define NOMINMAX
 #include <windows.h>
 #include <GL/glew.h>
 #include <gl/GLU.h>
+#else
+#include <GL/glew.h>
+#include <GL/glu.h>
 #endif
 #include <mitsuba/hw/gltexture.h>
 

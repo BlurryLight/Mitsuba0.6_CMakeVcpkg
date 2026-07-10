@@ -45,7 +45,7 @@
 #endif
 
 #if defined(__OSX__)
-#include "previewsettingsdlg_cocoa.h"
+#include "macos/previewsettingsdlg_cocoa.h"
 #else
 #include "previewsettingsdlg.h"
 #endif
