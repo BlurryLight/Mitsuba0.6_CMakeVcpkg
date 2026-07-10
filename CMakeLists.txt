@@ -205,6 +205,9 @@ add_subdirectory(src/libbidir)
 add_subdirectory(src/libpython)
 add_subdirectory(src/mitsuba)
 
+# --- Converter (COLLADA/OBJ -> XML, requires collada-dom) ---
+add_subdirectory(src/converter)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)

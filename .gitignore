@@ -10,13 +10,9 @@ doc/main.pdf
 doc/plugins_generated.tex
 
 # Build-related
-.sconf_temp
 build/release
 build/debug
 debian
-.sconsign.dblite
-config.py
-config.log
 *.pyc
 
 # MSVC++-related

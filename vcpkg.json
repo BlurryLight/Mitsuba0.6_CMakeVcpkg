@@ -22,6 +22,7 @@
          ]
       },
       "qt5-base",
-      "qt5-xmlpatterns"
+      "qt5-xmlpatterns",
+      "collada-dom"
    ]
 }

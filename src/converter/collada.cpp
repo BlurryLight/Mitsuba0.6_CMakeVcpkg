@@ -1603,7 +1603,7 @@ void GeometryConverter::convertCollada(const fs::path &inputFile,
         DAE *dae = new DAE();
         if (dae->load(inputFile.string().c_str()) != DAE_OK)
             SLog(EError, "Could not load \"%s\"!", inputFile.string().c_str());
-        domCOLLADA *document = dae->getDom(inputFile.string().c_str());
+        domCOLLADA *document = daeSafeCast<domCOLLADA>(dae->getDom(inputFile.string().c_str()));
     #endif
     domVisual_scene *visualScene = daeSafeCast<domVisual_scene>
         (document->getDescendant("visual_scene"));
