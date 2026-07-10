@@ -1,0 +1,134 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch / PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linux (Ubuntu 24.04) — apt only, no vcpkg
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux (Ubuntu 24.04, apt)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies (apt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libboost-filesystem-dev libboost-thread-dev libboost-chrono-dev \
+            libboost-date-time-dev libboost-atomic-dev libboost-python-dev \
+            zlib1g-dev libopenexr-dev libimath-dev \
+            libjpeg-turbo8-dev libpng-dev libxerces-c-dev libglew-dev \
+            libeigen3-dev libfftw3-dev \
+            qtbase5-dev qttools5-dev libqt5xmlpatterns5-dev libqt5opengl5-dev \
+            python3-dev python3-numpy \
+            libx11-dev libxmu-dev libxi-dev libgl-dev libglu1-mesa-dev libxxf86vm-dev
+
+      - name: Configure + build
+        run: ./scripts/build-linux.sh --no-apt
+
+      - name: Render smoke test
+        run: |
+          cat > /tmp/ci_scene.xml <<'XML'
+          <scene version="0.6.0">
+              <integrator type="path"><integer name="maxDepth" value="2"/></integrator>
+              <sensor type="perspective">
+                  <float name="fov" value="45"/>
+                  <transform name="toWorld">
+                      <lookat origin="0, 0, 3" target="0, 0, 0" up="0, 1, 0"/>
+                  </transform>
+                  <sampler type="halton"><integer name="sampleCount" value="4"/></sampler>
+                  <film type="ldrfilm">
+                      <integer name="width" value="32"/>
+                      <integer name="height" value="32"/>
+                      <string name="fileFormat" value="png"/>
+                  </film>
+              </sensor>
+              <emitter type="constant"><spectrum name="radiance" value="1.5"/></emitter>
+              <shape type="sphere">
+                  <float name="radius" value="1"/>
+                  <bsdf type="diffuse"><spectrum name="reflectance" value="0.8"/></bsdf>
+              </shape>
+          </scene>
+          XML
+          ./cbuild/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
+          file /tmp/ci_render.png
+
+      - name: Upload render artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-render
+          path: /tmp/ci_render.png
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # macOS (Apple Silicon) — Homebrew + Apple Clang
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS (Apple Silicon, Homebrew)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies (brew)
+        run: |
+          brew update
+          brew install --quiet \
+            cmake \
+            autoconf automake pkg-config \
+            qt@5 boost boost-python3 \
+            openexr libjpeg-turbo libpng \
+            xerces-c glew eigen fftw
+
+      - name: Configure + build
+        run: ./scripts/build-macos.sh --no-brew
+
+      - name: Render smoke test
+        # mtsgui is not built on macOS (BWToolkitFramework is defunct);
+        # the CLI tools are the supported render entry point.
+        run: |
+          cat > /tmp/ci_scene.xml <<'XML'
+          <scene version="0.6.0">
+              <integrator type="path"><integer name="maxDepth" value="2"/></integrator>
+              <sensor type="perspective">
+                  <float name="fov" value="45"/>
+                  <transform name="toWorld">
+                      <lookat origin="0, 0, 3" target="0, 0, 0" up="0, 1, 0"/>
+                  </transform>
+                  <sampler type="halton"><integer name="sampleCount" value="4"/></sampler>
+                  <film type="ldrfilm">
+                      <integer name="width" value="32"/>
+                      <integer name="height" value="32"/>
+                      <string name="fileFormat" value="png"/>
+                  </film>
+              </sensor>
+              <emitter type="constant"><spectrum name="radiance" value="1.5"/></emitter>
+              <shape type="sphere">
+                  <float name="radius" value="1"/>
+                  <bsdf type="diffuse"><spectrum name="reflectance" value="0.8"/></bsdf>
+              </shape>
+          </scene>
+          XML
+          ./cbuild/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
+          file /tmp/ci_render.png
+
+      - name: Upload render artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-render
+          path: /tmp/ci_render.png
+          if-no-files-found: error
