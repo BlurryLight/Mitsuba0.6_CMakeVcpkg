@@ -40,6 +40,8 @@ Mitsuba.app
 /textures
 mitsuba.*.log
 *.exr
+# Scene assets are tracked via Git LFS, override the *.exr ignore for them
+!scenes/**/*.exr
 
 # Eclipse CDT project files
 .externalToolBuilders
