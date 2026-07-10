@@ -16,8 +16,12 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef BOOST_FILESYSTEM_NO_LIB
 #define BOOST_FILESYSTEM_NO_LIB
+#endif
+#ifndef BOOST_SYSTEM_NO_LIB
 #define BOOST_SYSTEM_NO_LIB
+#endif
 
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/core/fstream.h>

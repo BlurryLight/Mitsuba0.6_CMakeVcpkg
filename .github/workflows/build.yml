@@ -14,6 +14,102 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Windows (MSYS2 UCRT64) — pacboy + GCC, no vcpkg, no Visual Studio
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows (MSYS2 UCRT64, GCC)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Run every step in MSYS2 bash so we can invoke the project's
+    # build-msys2.sh script directly. The UCRT64 environment matches
+    # the one documented in scripts/build-msys2.sh.
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      # actions/checkout would otherwise rewrite LF to CRLF on Windows,
+      # which would break shell scripts and the MSYS2 toolchain.
+      - name: Disable autocrlf before checkout
+        shell: bash
+        run: git config --global core.autocrlf input
+
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2 (UCRT64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # `install` is for MSYS2-distribution packages (git, base-devel
+          # gives us bash/make/etc.); `pacboy` is the shorthand for the
+          # UCRT64-prefixed mingw-w64 packages and matches the names that
+          # scripts/build-msys2.sh passes when run locally with
+          # `--no-install`.
+          install: >-
+            git
+            base-devel
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            boost:p
+            boost-libs:p
+            qt5-base:p
+            qt5-xmlpatterns:p
+            eigen3:p
+            fftw:p
+            openexr:p
+            imath:p
+            libjpeg-turbo:p
+            libpng:p
+            xerces-c:p
+            glew:p
+            python:p
+            python-numpy:p
+
+      - name: Configure + build
+        run: ./scripts/build-msys2.sh --no-install --clean
+
+      - name: Render smoke test
+        shell: msys2 {0}
+        run: |
+          set -e
+          cat > /tmp/ci_scene.xml <<'XML'
+          <scene version="0.6.0">
+              <integrator type="path"><integer name="maxDepth" value="2"/></integrator>
+              <sensor type="perspective">
+                  <float name="fov" value="45"/>
+                  <transform name="toWorld">
+                      <lookat origin="0, 0, 3" target="0, 0, 0" up="0, 1, 0"/>
+                  </transform>
+                  <sampler type="halton"><integer name="sampleCount" value="4"/></sampler>
+                  <film type="ldrfilm">
+                      <integer name="width" value="32"/>
+                      <integer name="height" value="32"/>
+                      <string name="fileFormat" value="png"/>
+                  </film>
+              </sensor>
+              <emitter type="constant"><spectrum name="radiance" value="1.5"/></emitter>
+              <shape type="sphere">
+                  <float name="radius" value="1"/>
+                  <bsdf type="diffuse"><spectrum name="reflectance" value="0.8"/></bsdf>
+              </shape>
+          </scene>
+          XML
+          ./build/cmake-msys2-release/bin/mitsuba.exe -o /tmp/ci_render.png -q /tmp/ci_scene.xml
+          test -s /tmp/ci_render.png
+          magic=$(head -c 8 /tmp/ci_render.png | od -An -tx1 | tr -d ' \n')
+          test "$magic" = "89504e470d0a1a0a"
+
+      - name: Upload render artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-render
+          path: /tmp/ci_render.png
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
   # Linux (Ubuntu 24.04) — apt only, no vcpkg
   # ---------------------------------------------------------------------------
   linux:
@@ -64,7 +160,7 @@ jobs:
               </shape>
           </scene>
           XML
-          ./cbuild/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
+          ./build/cmake-linux-release/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
           file /tmp/ci_render.png
 
       - name: Upload render artefact
@@ -123,7 +219,7 @@ jobs:
               </shape>
           </scene>
           XML
-          ./cbuild/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
+          ./build/cmake-macos-release/bin/mitsuba -o /tmp/ci_render.png -q /tmp/ci_scene.xml
           file /tmp/ci_render.png
 
       - name: Upload render artefact

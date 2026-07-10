@@ -58,3 +58,5 @@ data/windows/wmain_stub.obj
 
 CMakeFiles/
 CMakeCache.txt
+build/
+compile_commands.json

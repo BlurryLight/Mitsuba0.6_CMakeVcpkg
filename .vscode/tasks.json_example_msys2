@@ -1,0 +1,44 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "msys2 build release",
+            "type": "process",
+            "command": "D:\\msys64\\msys2_shell.cmd",
+            "args": [
+                "-ucrt64",
+                "-defterm",
+                "-no-start",
+                "-here",
+                "-c",
+                "./scripts/build-msys2.sh --release --no-smoke --no-stage"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "msys2 build debug",
+            "type": "process",
+            "command": "D:\\msys64\\msys2_shell.cmd",
+            "args": [
+                "-ucrt64",
+                "-defterm",
+                "-no-start",
+                "-here",
+                "-c",
+                "./scripts/build-msys2.sh --debug --no-smoke --no-stage"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}

@@ -71,7 +71,7 @@ void SetThreadName(const char* threadName, DWORD dwThreadID = -1) {
 #if defined(__LINUX__) || defined(__OSX__)
 static pthread_key_t __thread_id;
 #elif defined(__WINDOWS__)
-__declspec(thread) int __thread_id;
+static thread_local int __thread_id;
 #endif
 static int __thread_id_ctr = -1;
 
@@ -442,7 +442,7 @@ void Thread::dispatch(Thread *thread) {
         pthread_setname_np(pthread_self(), threadName.c_str());
 #elif defined(__OSX__)
         pthread_setname_np(threadName.c_str());
-#elif defined(__WINDOWS__)
+#elif defined(__MSVC__)
         SetThreadName(threadName.c_str());
 #endif
     }
@@ -497,7 +497,10 @@ void Thread::yield() {
 void Thread::exit() {
     Log(EDebug, "Thread \"%s\" has finished", d->name.c_str());
     d->running = false;
-    Assert(ThreadPrivate::self->get() == this);
+    if (ThreadPrivate::self) {
+        Thread *self = ThreadPrivate::self->get();
+        Assert(self == this);
+    }
     detail::destroyLocalTLS();
     decRef();
 }
@@ -633,11 +636,11 @@ void Thread::initializeOpenMP(size_t threadCount) {
             }
             const std::string threadName = "Mitsuba: " + thread->getName();
 
-            #if defined(__LINUX__) 
+            #if defined(__LINUX__)
                 pthread_setname_np(pthread_self(), threadName.c_str());
             #elif defined(__OSX__)
                 pthread_setname_np(threadName.c_str());
-            #elif defined(__WINDOWS__)
+            #elif defined(__MSVC__)
                 SetThreadName(threadName.c_str());
             #endif
 

@@ -28,9 +28,14 @@ find_path(libjpeg-turbo_INCLUDE_DIR
 )
 mark_as_advanced(libjpeg-turbo_INCLUDE_DIR)
 
-# --- library (prefer -turbo, fall back to plain libjpeg) ---------------------
+# --- library (prefer the standard libjpeg API) ------------------------------
+# The project links against the classical libjpeg API (jpeg_create_decompress
+# etc.). MSYS2 / Homebrew ship both libjpeg.a (the libjpeg API) and
+# libturbojpeg.a (the TurboJPEG C API), so we look for the standard one
+# explicitly. vcpkg only ships the libjpeg-style library, so this order
+# still works there.
 find_library(libjpeg-turbo_LIBRARY
-    NAMES jpeg-turbo turbojpeg jpeg
+    NAMES jpeg jpeg-turbo turbojpeg
     HINTS ${_libjpeg-turbo_HINTS}
     PATH_SUFFIXES lib lib64
 )

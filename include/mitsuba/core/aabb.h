@@ -22,6 +22,16 @@
 
 #include <mitsuba/core/bsphere.h>
 
+/* Imath's Frustum header still defines `near` and `far` as macros for legacy
+ * 16-bit Windows code; undefine them so the `rayIntersect` parameters below
+ * don't get expanded to nothing. */
+#ifdef near
+#  undef near
+#endif
+#ifdef far
+#  undef far
+#endif
+
 MTS_NAMESPACE_BEGIN
 
 /**
@@ -392,11 +402,15 @@ template <typename T> struct TAABB {
         near = ray(nearT); far = ray(farT);
 
         /* Avoid roundoff errors on the component where the intersection took place */
-        if (nearAxis >= 0)
-            near[nearAxis % PointType::dim] = ((Float *) this)[nearAxis];
+        if (nearAxis >= 0) {
+            const int dim = T::dim;
+            near[nearAxis % dim] = ((typename T::Scalar *) this)[nearAxis];
+        }
 
-        if (farAxis >= 0)
-            far[farAxis % PointType::dim]   = ((Float *) this)[farAxis];
+        if (farAxis >= 0) {
+            const int dim = T::dim;
+            far[farAxis % dim]   = ((typename T::Scalar *) this)[farAxis];
+        }
 
         return true;
     }

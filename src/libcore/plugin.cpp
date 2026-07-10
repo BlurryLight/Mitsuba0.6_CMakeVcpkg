@@ -103,7 +103,7 @@ Plugin::Plugin(const std::string &shortName, const fs::path &path)
 
 bool Plugin::hasSymbol(const std::string &sym) const {
 #if defined(__WINDOWS__)
-    void *ptr = GetProcAddress(d->handle, sym.c_str());
+    void *ptr = reinterpret_cast<void *>(GetProcAddress(d->handle, sym.c_str()));
 #else
     void *ptr = dlsym(d->handle, sym.c_str());
 #endif
@@ -112,7 +112,7 @@ bool Plugin::hasSymbol(const std::string &sym) const {
 
 void *Plugin::getSymbol(const std::string &sym) {
 #if defined(__WINDOWS__)
-    void *data = GetProcAddress(d->handle, sym.c_str());
+    void *data = reinterpret_cast<void *>(GetProcAddress(d->handle, sym.c_str()));
     if (!data) {
         SLog(EError, "Could not resolve symbol \"%s\" in \"%s\": %s",
             sym.c_str(), d->path.string().c_str(), lastErrorText().c_str());
@@ -224,18 +224,31 @@ void PluginManager::ensurePluginLoaded(const std::string &name) {
     if (m_plugins[name] != NULL)
         return;
 
-    /* Build the full plugin file name */
+    /* Build the full plugin file name. CMake keeps the default "lib" prefix
+     * on Windows, so plugins end up named "libpath.dll" -- try that first,
+     * then fall back to the unprefixed name. */
     fs::path shortName = fs::path("plugins") / name;
 #if defined(__WINDOWS__)
     shortName.replace_extension(".dll");
+    fs::path libShortName = fs::path("plugins") / (std::string("lib") + name);
+    libShortName.replace_extension(".dll");
 #elif defined(__OSX__)
     shortName.replace_extension(".dylib");
+    fs::path libShortName;
 #else
     shortName.replace_extension(".so");
+    fs::path libShortName;
 #endif
 
     const FileResolver *resolver = Thread::getThread()->getFileResolver();
     fs::path path = resolver->resolve(shortName);
+    if (!fs::exists(path) && !libShortName.empty()) {
+        fs::path libPath = resolver->resolve(libShortName);
+        if (fs::exists(libPath)) {
+            path = libPath;
+            shortName = libShortName;
+        }
+    }
 
     if (fs::exists(path)) {
         Log(EInfo, "Loading plugin \"%s\" ..", shortName.string().c_str());

@@ -8,42 +8,52 @@
 #
 # This script does three things:
 #   1. Installs the apt build dependencies (skippable with --no-apt).
-#   2. Configures the CMake project under ./cbuild.
+#   2. Configures the CMake project under ./build/cmake-linux-release (or
+#      --debug, or --build-dir=...).
 #   3. Builds the project.
 #
 # No vcpkg, no Homebrew: every dependency comes from the system package
 # manager.
 #
 # Usage:
-#   ./scripts/build-linux.sh                # release build
-#   ./scripts/build-linux.sh --debug        # debug build
-#   ./scripts/build-linux.sh --no-apt       # skip the apt install step
-#   ./scripts/build-linux.sh --clean        # wipe cbuild/ first
+#   ./scripts/build-linux.sh                                    # release build
+#   ./scripts/build-linux.sh --debug                            # debug build
+#   ./scripts/build-linux.sh --build-dir=/path/to/build         # custom build dir
+#   ./scripts/build-linux.sh --no-apt                           # skip the apt install step
+#   ./scripts/build-linux.sh --clean                            # wipe build dir first
+#   ./scripts/build-linux.sh --no-smoke                         # skip smoke tests
 #
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${REPO_ROOT}/cbuild"
 
 APT=true
 CLEAN=false
 BUILD_TYPE=Release
 JOBS="$(nproc 2>/dev/null || echo 4)"
+SMOKE=true
 
 for arg in "$@"; do
     case "$arg" in
-        --no-apt)  APT=false ;;
-        --clean)   CLEAN=true ;;
-        --debug)   BUILD_TYPE=Debug ;;
-        --release) BUILD_TYPE=Release ;;
-        -j*)       JOBS="${arg#-j}" ;;
+        --no-apt)    APT=false ;;
+        --clean)     CLEAN=true ;;
+        --debug)     BUILD_TYPE=Debug ;;
+        --release)   BUILD_TYPE=Release ;;
+        --no-smoke)  SMOKE=false ;;
+        --build-dir=*) BUILD_DIR="${arg#*=}" ;;
+        -j*)         JOBS="${arg#-j}" ;;
         -h|--help)
-            sed -n '2,22p' "$0"
+            sed -n '2,23p' "$0"
             exit 0
             ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
     esac
 done
+
+if [[ -z "${BUILD_DIR:-}" ]]; then
+    BUILD_TYPE_LOWER=$(echo "${BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')
+    BUILD_DIR="${REPO_ROOT}/build/cmake-linux-${BUILD_TYPE_LOWER}"
+fi
 
 log()  { printf '\033[1;34m[build-linux]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[build-linux]\033[0m %s\n' "$*"; }
@@ -88,16 +98,25 @@ fi
 log "Configuring CMake (build type: ${BUILD_TYPE}) ..."
 cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -GNinja
 
 log "Building with ${JOBS} jobs ..."
 cmake --build "${BUILD_DIR}" -j "${JOBS}"
 
+# Create symlink for compile_commands.json at repo root
+ln -sf "${BUILD_DIR}/compile_commands.json" "${REPO_ROOT}/compile_commands.json"
+
 # --- Smoke test ------------------------------------------------------------
-log "Smoke-testing binaries ..."
-"${BUILD_DIR}/bin/mitsuba" -h >/dev/null
-"${BUILD_DIR}/bin/mtsutil" -h >/dev/null
-"${BUILD_DIR}/bin/mtssrv"  -h >/dev/null
+if $SMOKE; then
+    log "Smoke-testing binaries ..."
+    "${BUILD_DIR}/bin/mitsuba" -h >/dev/null
+    "${BUILD_DIR}/bin/mtsutil" -h >/dev/null
+    "${BUILD_DIR}/bin/mtssrv"  -h >/dev/null
+else
+    log "Skipping smoke test (--no-smoke)."
+fi
+
 log "Done. Binaries are in ${BUILD_DIR}/bin/"
 log "Plugins are in  ${BUILD_DIR}/bin/plugins/"
 log ""

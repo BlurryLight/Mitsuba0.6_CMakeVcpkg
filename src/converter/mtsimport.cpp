@@ -242,7 +242,7 @@ int mts_main(int argc, char **argv) {
     return retval;
 }
 
-#if !defined(__OSX__) && !defined(__WINDOWS__)
+#if !defined(__OSX__) && (!defined(__WINDOWS__) || defined(__MINGW32__))
 int main(int argc, char **argv) {
     return mts_main(argc, argv);
 }

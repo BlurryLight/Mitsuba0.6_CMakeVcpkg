@@ -3,7 +3,7 @@ Mitsuba Fork for CMake
 
 This project is based on [VicentChen/mitsuba](https://github.com/VicentChen/mitsuba),
 a fork of Mitsuba 0.6. The dependency management has been modernized and the
-build now works on **Windows (vcpkg)**, **Linux (vcpkg or system packages)**
+build now works on **Windows (vcpkg or MSYS2)**, **Linux (vcpkg or system packages)**
 and **macOS (Homebrew)**.
 
 ## Platforms
@@ -11,6 +11,7 @@ and **macOS (Homebrew)**.
 | OS | Toolchain | Tested |
 |---|---|---|
 | Windows 10/11 | Visual Studio 2022 + [vcpkg](https://vcpkg.io/en/) | yes |
+| Windows 10/11 | MSYS2 (UCRT64) + pacboy | yes |
 | **Linux (Ubuntu 24.04)** | **g++ + CMake + apt** | **yes** |
 | macOS 15+ (Apple Silicon) | Homebrew + Apple Clang | yes |
 
@@ -23,19 +24,20 @@ cd Mitsuba0.6_CMakeVcpkg
 ```
 
 The script installs every build dependency via `apt` (no vcpkg, no manual
-tweaking), configures the CMake project under `./cbuild`, and builds it.
-The renderer binaries land in `cbuild/bin/` and the plugins in
-`cbuild/bin/plugins/`.
+tweaking), configures the CMake project under `./build/cmake-linux-release`
+(or `./build/cmake-linux-debug`), and builds it. The renderer binaries land
+in `build/cmake-linux-release/bin/` and the plugins in
+`build/cmake-linux-release/bin/plugins/`.
 
 Try a render:
 ```bash
-./cbuild/bin/mitsuba path/to/scene.xml -o out.exr
+./build/cmake-linux-release/bin/mitsuba path/to/scene.xml -o out.exr
 ```
 
 The build script accepts the following flags:
 ```bash
 ./scripts/build-linux.sh --debug     # debug build
-./scripts/build-linux.sh --clean     # wipe cbuild/ before configuring
+./scripts/build-linux.sh --clean     # wipe build dir before configuring
 ./scripts/build-linux.sh --no-apt    # skip the apt install step
 ```
 
@@ -55,7 +57,7 @@ sudo apt install -y --no-install-recommends \
     python3-dev python3-numpy \
     libx11-dev libxmu-dev libxi-dev libgl-dev libglu1-mesa-dev libxxf86vm-dev
 
-mkdir cbuild && cd cbuild
+mkdir build && cd build
 cmake -GNinja -DCMAKE_BUILD_TYPE=Release ..
 cmake --build . -j
 ```
@@ -70,17 +72,18 @@ cd Mitsuba0.6_CMakeVcpkg
 
 The script installs the Homebrew dependencies, patches two well-known Homebrew
 Qt5 layout quirks, configures the CMake project, and builds it. Produces the
-renderer binaries in `cbuild/bin/` and the plugins in `cbuild/bin/plugins/`.
+renderer binaries in `build/cmake-macos-release/bin/` and the plugins in
+`build/cmake-macos-release/bin/plugins/`.
 
 Try a render:
 ```bash
-./cbuild/bin/mitsuba path/to/scene.xml -o out.exr
+./build/cmake-macos-release/bin/mitsuba path/to/scene.xml -o out.exr
 ```
 
 The build script accepts the following flags:
 ```bash
 ./scripts/build-macos.sh --debug     # debug build
-./scripts/build-macos.sh --clean     # wipe cbuild/ before configuring
+./scripts/build-macos.sh --clean     # wipe build dir before configuring
 ./scripts/build-macos.sh --no-brew   # skip the brew install step
 ```
 
@@ -99,7 +102,7 @@ for p in /opt/homebrew/Cellar/qt@5/*/plugins/*; do
 done
 ln -sfn /opt/homebrew/include/GL /opt/homebrew/include/OpenGL
 
-mkdir cbuild && cd cbuild
+mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_PREFIX_PATH=/opt/homebrew \
       -DFFTW3_DIR=/opt/homebrew/lib/cmake/fftw3 \
@@ -110,6 +113,47 @@ cmake --build . -j
 
 ## Quick start — Windows
 
+### Option A: MSYS2 (UCRT64) — no vcpkg, no Visual Studio
+
+This path uses the system package manager (`pacman` / `pacboy`) instead of
+vcpkg and builds with `g++`. Open a **UCRT64** MSYS2 shell
+(`C:\msys64\ucrt64.exe`) and run:
+
+```bash
+git clone https://github.com/BlurryLight/Mitsuba0.6_CMakeVcpkg.git
+cd Mitsuba0.6_CMakeVcpkg
+./scripts/build-msys2.sh
+```
+
+The script installs every build dependency via `pacboy` (no vcpkg, no
+manual tweaking), configures the CMake project under `./build/cmake-msys2-release`,
+and builds it. The renderer binaries land in `build/cmake-msys2-release/bin/`
+and the plugins in `build/cmake-msys2-release/bin/plugins/`. The script also
+stages the required UCRT runtime DLLs into `build/cmake-msys2-release/bin/`
+so the build is self-contained — you do not need to keep `/ucrt64/bin` on PATH.
+
+Try a render:
+```bash
+./build/cmake-msys2-release/bin/mitsuba.exe path/to/scene.xml -o out.exr
+```
+
+The build script accepts the following flags:
+```bash
+./scripts/build-msys2.sh --debug      # debug build
+./scripts/build-msys2.sh --clean      # wipe build dir before configuring
+./scripts/build-msys2.sh --no-install # skip the pacboy install step
+```
+
+Notes:
+ - The `mtsimport` (COLLADA / OBJ → XML) converter is **not** built on the
+   MSYS2 path. The MSYS2 `mingw-w64-ucrt-x86_64-collada-dom` package
+   hard-pins Boost 1.89 in its CMake config and injects `BOOST_ALL_DYN_LINK`
+   defines that conflict with the Boost imported targets used elsewhere in
+   the tree, so the converter is MSVC / Linux / macOS only. The renderer
+   itself is unaffected.
+
+### Option B: Visual Studio + vcpkg
+
 ### Environment
  - [CMake](https://cmake.org/download/)
  - [vcpkg](https://vcpkg.io/en/)
@@ -118,8 +162,8 @@ cmake --build . -j
 ```bat
 git clone https://github.com/BlurryLight/Mitsuba0.6_CMakeVcpkg.git
 cd Mitsuba0.6_CMakeVcpkg
-cmake -S . -B cbuild -DCMAKE_TOOLCHAIN_FILE=[path\to\vcpkg.cmake]
-cmake --build cbuild --config Release
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=[path\to\vcpkg.cmake]
+cmake --build build --config Release
 ```
 
 This setup has been tested on Visual Studio 2022 + Windows 10.
@@ -132,9 +176,9 @@ This setup has been tested on Visual Studio 2022 + Windows 10.
  - `MTS_SSE` is disabled on macOS (no SSE on Apple Silicon); `MTS_HAS_COHERENT_RT`
    is disabled everywhere because Intel Embree is not in the vcpkg dependency
    list. Both are build-time-only defines; the code falls back to portable paths.
- - The OpenMP runtime is not auto-detected on macOS. Multi-threaded rendering
-   inside a single image falls back to single-threaded execution. The network
-   renderer (`mtssrv`) and the multi-scene scheduler still use threads.
+  - The OpenMP runtime is not auto-detected on macOS. Multi-threaded rendering
+    inside a single image falls back to single-threaded execution. The network
+    renderer (`mtssrv`) and the multi-scene scheduler still use threads.
 
 ## Layout
 
@@ -144,12 +188,13 @@ Mitsuba0.6_CMakeVcpkg/
 ├── vcpkg.json              # vcpkg dependency manifest
 ├── scripts/
 │   ├── build-linux.sh      # one-shot Linux build (apt + cmake)
-│   └── build-macos.sh      # one-shot macOS build (brew + cmake)
+│   ├── build-macos.sh      # one-shot macOS build (brew + cmake)
+│   └── build-msys2.sh      # one-shot Windows build (MSYS2 UCRT64 + pacboy)
 ├── src/                    # sources (core lib, plugins, CLI tools)
 ├── include/mitsuba/        # public headers
 ├── data/                   # schemas, IOR tables, default resources
-└── cbuild/                 # build output (gitignored)
-    ├── bin/                # mitsuba, mtssrv, mtsutil
-    │   └── plugins/        # *.dylib plugin modules
-    └── lib/                # libmitsuba-{core,render,hw,bidir,python}.dylib
+└── build/                  # build output (gitignored)
+    ├── bin/                # mitsuba, mtssrv, mtsutil (+ staged UCRT DLLs)
+    │   └── plugins/        # *.dll plugin modules
+    └── lib/                # libmitsuba-{core,render,hw,bidir,python}.dll
 ```

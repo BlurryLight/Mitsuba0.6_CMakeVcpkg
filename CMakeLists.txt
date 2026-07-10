@@ -154,6 +154,15 @@ if(MSVC)
     add_link_options(/FIXED:NO /SUBSYSTEM:CONSOLE /NODEFAULTLIB:LIBCMT /MANIFEST)
 endif()
 
+# --- Compiler warnings → errors ---
+# -Wattributes flags things like 'thread' attribute directive ignored, which
+# is exactly how MinGW/GCC silently breaks __declspec(thread) in DLLs (the
+# variable ends up shared across threads instead of per-thread). Promote it
+# to a hard error so the bug is caught at build time, not in production.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Werror=attributes)
+endif()
+
 # --- Shared library lists ---
 # Subdirectory CMake files consume these variables when linking Mitsuba components.
 if(WIN32)
@@ -176,8 +185,8 @@ set(FFTW_LIB_LIST FFTW3::fftw3f FFTW3::fftw3)
 
 # --- FFTW3 threads support (needed for fftw_init_threads etc.) -------------
 # vcpkg's FFTW3Config.cmake transitively links the threads flavour, but
-# Homebrew/apt do not — resolve the threads library explicitly.
-if(NOT APPLE AND NOT WIN32)
+# Homebrew/apt/MSYS2 do not — resolve the threads library explicitly.
+if(NOT APPLE)
     find_library(FFTW3_THREADS_LIB
         NAMES fftw3_threads
         HINTS "${FFTW3_LIBRARY_DIRS}" "${FFTW3f_LIBRARY_DIRS}"
@@ -206,6 +215,10 @@ add_subdirectory(src/libpython)
 add_subdirectory(src/mitsuba)
 
 # --- Converter (COLLADA/OBJ -> XML, requires collada-dom) ---
+# On MSYS2/MinGW, the collada-dom CMake config hard-pins Boost and pulls
+# in conflicting defines, so the converter's CMakeLists.txt skips the
+# find_package(collada_dom) call and uses a manual header/library search
+# instead. Build is supported everywhere.
 add_subdirectory(src/converter)
 
 set(CMAKE_AUTOMOC ON)

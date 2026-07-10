@@ -31,9 +31,9 @@
 #include <stdexcept>
 
 #if defined(__WINDOWS__)
-  #define __tls_decl __declspec(thread)
+  #define __tls_decl thread_local
 #else
-  #define __tls_decl __thread
+  #define __tls_decl thread_local
 #endif
 
 /**

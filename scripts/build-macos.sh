@@ -11,23 +11,26 @@
 #   1. Installs the Homebrew dependencies (skipped if already installed).
 #   2. Patches the two Homebrew quirks that block the CMake configure step
 #      (Qt5 mkspecs/plugins and GLEW header layout).
-#   3. Configures and builds the project under ./cbuild.
+#   3. Configures and builds the project under ./build/cmake-macos-release (or
+#      --debug, or --build-dir=...).
 #
 # Usage:
-#   ./scripts/build-macos.sh                # release build
-#   ./scripts/build-macos.sh --debug        # debug build
-#   ./scripts/build-macos.sh --no-brew      # skip the brew install step
-#   ./scripts/build-macos.sh --clean        # wipe cbuild/ first
+#   ./scripts/build-macos.sh                                    # release build
+#   ./scripts/build-macos.sh --debug                            # debug build
+#   ./scripts/build-macos.sh --build-dir=/path/to/build         # custom build dir
+#   ./scripts/build-macos.sh --no-brew                          # skip the brew install step
+#   ./scripts/build-macos.sh --clean                            # wipe build dir first
+#   ./scripts/build-macos.sh --no-smoke                         # skip smoke tests
 #
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${REPO_ROOT}/cbuild"
 
 BREW=true
 CLEAN=false
 BUILD_TYPE=Release
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+SMOKE=true
 
 for arg in "$@"; do
     case "$arg" in
@@ -35,14 +38,21 @@ for arg in "$@"; do
         --clean)    CLEAN=true ;;
         --debug)    BUILD_TYPE=Debug ;;
         --release)  BUILD_TYPE=Release ;;
+        --no-smoke) SMOKE=false ;;
+        --build-dir=*) BUILD_DIR="${arg#*=}" ;;
         -j*)        JOBS="${arg#-j}" ;;
         -h|--help)
-            sed -n '2,20p' "$0"
+            sed -n '2,24p' "$0"
             exit 0
             ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
     esac
 done
+
+if [[ -z "${BUILD_DIR:-}" ]]; then
+    BUILD_TYPE_LOWER=$(echo "${BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')
+    BUILD_DIR="${REPO_ROOT}/build/cmake-macos-${BUILD_TYPE_LOWER}"
+fi
 
 log()  { printf '\033[1;34m[build-macos]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[build-macos]\033[0m %s\n' "$*"; }
@@ -103,16 +113,25 @@ cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_PREFIX_PATH="${BREW_PREFIX}" \
     -DFFTW3_DIR="${BREW_PREFIX}/lib/cmake/fftw3" \
-    -DFFTW3f_DIR="${BREW_PREFIX}/lib/cmake/fftw3"
+    -DFFTW3f_DIR="${BREW_PREFIX}/lib/cmake/fftw3" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 log "Building with ${JOBS} jobs ..."
 cmake --build "${BUILD_DIR}" -j "${JOBS}"
 
+# Create symlink for compile_commands.json at repo root
+ln -sf "${BUILD_DIR}/compile_commands.json" "${REPO_ROOT}/compile_commands.json"
+
 # --- Smoke test ------------------------------------------------------------
-log "Smoke-testing binaries ..."
-"${BUILD_DIR}/bin/mitsuba" -h >/dev/null
-"${BUILD_DIR}/bin/mtsutil" -h >/dev/null
-"${BUILD_DIR}/bin/mtssrv"  -h >/dev/null
+if $SMOKE; then
+    log "Smoke-testing binaries ..."
+    "${BUILD_DIR}/bin/mitsuba" -h >/dev/null
+    "${BUILD_DIR}/bin/mtsutil" -h >/dev/null
+    "${BUILD_DIR}/bin/mtssrv"  -h >/dev/null
+else
+    log "Skipping smoke test (--no-smoke)."
+fi
+
 log "Done. Binaries are in ${BUILD_DIR}/bin/"
 log "Plugins are in  ${BUILD_DIR}/bin/plugins/"
 log ""

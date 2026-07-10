@@ -29,10 +29,6 @@
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 
-#if defined(__OSX__)
-# include <pthread.h>
-#endif
-
 MTS_NAMESPACE_BEGIN
 
 namespace mi = boost::multi_index;
@@ -89,13 +85,14 @@ boost::unordered_set<PerThreadData *> ptdGlobal;
 /// Lock to protect ptdGlobal
 boost::mutex ptdGlobalLock;
 
-#if defined(__WINDOWS__)
-__declspec(thread) PerThreadData *ptdLocal = NULL;
-#elif defined(__LINUX__)
-__thread PerThreadData *ptdLocal = NULL;
-#elif defined(__OSX__)
-pthread_key_t ptdLocal;
-#endif
+/* Pointer to the current thread's PerThreadData. Uses the C++11 thread_local
+   keyword which correctly expands to the right native TLS primitive on every
+   platform we support (Windows __declspec(thread) in MSVC DLLs, __thread in
+   GCC/Clang, etc.). Note: __declspec(thread) on MinGW/GCC in a DLL context
+   silently degrades to a global variable, so we deliberately use the standard
+   keyword. The CMakeLists.txt turns -Wattributes into an error to prevent
+   accidental use of __declspec(thread) in DLLs. */
+static thread_local PerThreadData *ptdLocal = nullptr;
 
 struct ThreadLocalBase::ThreadLocalPrivate {
     ConstructFunctor constructFunctor;
@@ -135,14 +132,9 @@ struct ThreadLocalBase::ThreadLocalPrivate {
         bool existed = true;
         void *data;
 
-#if defined(__OSX__)
-        PerThreadData *ptd = (PerThreadData *) pthread_getspecific(ptdLocal);
-#else
         PerThreadData *ptd = ptdLocal;
-#endif
         if (EXPECT_NOT_TAKEN(!ptd))
-            throw std::runtime_error("Internal error: call to ThreadLocalPrivate::get() "
-                " precedes the construction of thread-specific data structures!");
+            return std::make_pair((void *) NULL, false);
 
         /* This is an uncontended thread-local lock (i.e. not to worry) */
         boost::lock_guard<boost::recursive_mutex> guard(ptd->mutex);
@@ -188,46 +180,24 @@ const void *ThreadLocalBase::get(bool &existed) const {
     return result.first;
 }
 
-void initializeGlobalTLS() {
-#if defined(__OSX__)
-    pthread_key_create(&ptdLocal, NULL);
-#endif
-}
+void initializeGlobalTLS() { }
 
-void destroyGlobalTLS() {
-#if defined(__OSX__)
-    pthread_key_delete(ptdLocal);
-    memset(&ptdLocal, 0, sizeof(pthread_key_t));
-#endif
-}
+void destroyGlobalTLS() { }
 
 /// A new thread was started -- set up TLS data structures
 void initializeLocalTLS() {
     boost::lock_guard<boost::mutex> guard(ptdGlobalLock);
-#if defined(__OSX__)
-    PerThreadData *ptd = (PerThreadData *) pthread_getspecific(ptdLocal);
-    if (!ptd) {
-        ptd = new PerThreadData();
-        ptdGlobal.insert(ptd);
-        pthread_setspecific(ptdLocal, ptd);
-    }
-#else
     if (!ptdLocal) {
         ptdLocal = new PerThreadData();
         ptdGlobal.insert(ptdLocal);
     }
-#endif
 }
 
 /// A thread has died -- destroy any remaining TLS entries associated with it
 void destroyLocalTLS() {
     boost::lock_guard<boost::mutex> guard(ptdGlobalLock);
 
-#if defined(__OSX__)
-    PerThreadData *ptd = (PerThreadData *) pthread_getspecific(ptdLocal);
-#else
     PerThreadData *ptd = ptdLocal;
-#endif
 
     boost::unique_lock<boost::recursive_mutex> lock(ptd->mutex);
 
@@ -241,11 +211,7 @@ void destroyLocalTLS() {
     lock.unlock();
     ptdGlobal.erase(ptd);
     delete ptd;
-#if defined(__OSX__)
-    pthread_setspecific(ptdLocal, NULL);
-#else
-    ptdLocal = NULL;
-#endif
+    ptdLocal = nullptr;
 }
 
 } /* namespace detail */

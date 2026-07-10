@@ -63,6 +63,19 @@
         #define MTS_XSTRINGIFY(s) MTS_STRINGIFY(s)
         #pragma detect_mismatch("MTS_SPECTRUM_SAMPLES", MTS_XSTRINGIFY(SPECTRUM_SAMPLES))
     #endif
+#elif defined(__MINGW32__) || (defined(__CYGWIN__) && !defined(_MSC_VER))
+    // MinGW / Cygwin GCC: same target as MSVC, but no MSVC builtins or
+    // #pragma intrinsics. We still want the Windows code paths (wgl*, WinSock
+    // helpers, etc.) to be selected downstream, so define __WINDOWS__ -- just
+    // leave __MSVC__ undefined so the rest of the tree picks the GCC path.
+    #define __WINDOWS__
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <stdint.h>
 #elif defined(__APPLE__)
     #define __OSX__
 #elif defined(__linux)

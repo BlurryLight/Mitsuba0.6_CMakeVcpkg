@@ -36,6 +36,7 @@
 #include <psapi.h>
 #else
 #include <malloc.h>
+#include <fenv.h>
 #endif
 
 #if defined(__WINDOWS__)
@@ -297,7 +298,7 @@ std::string lastErrorText() {
 
 bool enableFPExceptions() {
     bool exceptionsWereEnabled = false;
-#if defined(__WINDOWS__)
+#if defined(__WINDOWS__) && !defined(__MINGW32__)
     _clearfp();
     uint32_t cw = _controlfp(0, 0);
     exceptionsWereEnabled = ~cw & (_EM_INVALID | _EM_ZERODIVIDE | _EM_OVERFLOW);
@@ -306,9 +307,15 @@ bool enableFPExceptions() {
 #elif defined(__OSX__)
     exceptionsWereEnabled = query_fpexcept_sse() != 0;
 #else
-    exceptionsWereEnabled =
-        fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
-    feenableexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #if defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2))
+        exceptionsWereEnabled =
+            fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+        feenableexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #else
+        /* MinGW / newlib do not expose glibc's fegetexcept / feenableexcept.
+         * The SSE traps below (enable_fpexcept_sse) are the only path. */
+        exceptionsWereEnabled = false;
+    #endif
 #endif
     enable_fpexcept_sse();
     return exceptionsWereEnabled;
@@ -316,7 +323,7 @@ bool enableFPExceptions() {
 
 bool disableFPExceptions() {
     bool exceptionsWereEnabled = false;
-#if defined(__WINDOWS__)
+#if defined(__WINDOWS__) && !defined(__MINGW32__)
     _clearfp();
     uint32_t cw = _controlfp(0, 0);
     exceptionsWereEnabled = ~cw & (_EM_INVALID | _EM_ZERODIVIDE | _EM_OVERFLOW);
@@ -325,9 +332,13 @@ bool disableFPExceptions() {
 #elif defined(__OSX__)
     exceptionsWereEnabled = query_fpexcept_sse() != 0;
 #else
-    exceptionsWereEnabled =
-        fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
-    fedisableexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #if defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2))
+        exceptionsWereEnabled =
+            fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+        fedisableexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #else
+        exceptionsWereEnabled = false;
+    #endif
 #endif
     disable_fpexcept_sse();
     return exceptionsWereEnabled;
@@ -335,13 +346,17 @@ bool disableFPExceptions() {
 
 void restoreFPExceptions(bool oldState) {
     bool currentState;
-#if defined(__WINDOWS__)
+#if defined(__WINDOWS__) && !defined(__MINGW32__)
     uint32_t cw = _controlfp(0, 0);
     currentState = ~cw & (_EM_INVALID | _EM_ZERODIVIDE | _EM_OVERFLOW);
 #elif defined(__OSX__)
     currentState = query_fpexcept_sse() != 0;
 #else
-    currentState = fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #if defined(__GLIBC__) && ((__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2))
+        currentState = fegetexcept() & (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW);
+    #else
+        currentState = false;
+    #endif
 #endif
     if (oldState != currentState) {
         if (oldState)
