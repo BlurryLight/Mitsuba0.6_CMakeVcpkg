@@ -16,6 +16,14 @@ if(MSVC)
   add_compile_options(/MP) # Enable parallel compilation in Visual Studio.
 endif()
 
+if(APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+    # Silence the avalanche of deprecation warnings on macOS SDK headers.
+    add_compile_options(-Wno-deprecated-declarations -Wno-unknown-pragmas)
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(MITSUBA_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -51,6 +59,22 @@ find_package(Eigen3 REQUIRED)
 find_package(FFTW3 CONFIG REQUIRED)
 find_package(FFTW3f CONFIG REQUIRED)
 
+# --- FFTW3 imported targets (vcpkg provides these; Homebrew's package does not) ---
+if(NOT TARGET FFTW3::fftw3)
+    find_library(FFTW3_LIB NAMES fftw3 HINTS "${FFTW3_LIBRARY_DIRS}" REQUIRED)
+    add_library(FFTW3::fftw3 UNKNOWN IMPORTED)
+    set_target_properties(FFTW3::fftw3 PROPERTIES
+        IMPORTED_LOCATION "${FFTW3_LIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${FFTW3_INCLUDE_DIRS}")
+endif()
+if(NOT TARGET FFTW3::fftw3f)
+    find_library(FFTW3f_LIB NAMES fftw3f HINTS "${FFTW3f_LIBRARY_DIRS}" REQUIRED)
+    add_library(FFTW3::fftw3f UNKNOWN IMPORTED)
+    set_target_properties(FFTW3::fftw3f PROPERTIES
+        IMPORTED_LOCATION "${FFTW3f_LIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${FFTW3f_INCLUDE_DIRS}")
+endif()
+
 # --- Python integration ---
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
 set(PYTHON_VERSION_WITHOUT_DOT "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
@@ -63,22 +87,34 @@ find_package(Boost REQUIRED COMPONENTS ${PYTHON_VERSION_WITHOUT_DOT})
 # Imported targets provide dependency include paths; only the project headers are added globally.
 include_directories("${MITSUBA_ROOT_DIR}/include")
 # --- OpenEXR/Imath compatibility include paths ---
-find_package(OpenEXR REQUIRED) # Ensures OpenEXR_INCLUDE_DIRS is available for legacy source includes.
-include_directories(${OpenEXR_INCLUDE_DIRS})
-
-
-find_package(Imath REQUIRED)
-message(STATUS "Imath include directories: ${Imath_INCLUDE_DIRS}")
-message(STATUS "Imath libraries: ${Imath_LIBRARIES}")
-# include_directories(${Imath_INCLUDE_DIRS})
+# Modern OpenEXR (>=3) and Imath ship their headers under versioned subdirectories.
+if(EXISTS "${OpenEXR_INCLUDE_DIRS}/OpenEXR")
+    include_directories("${OpenEXR_INCLUDE_DIRS}")
+endif()
+if(EXISTS "${Imath_DIR}/../../../include/Imath")
+    include_directories("${Imath_DIR}/../../../include")
+endif()
 
 # --- Mitsuba compile definitions ---
 set(Mitsuba_Float_Percision "SINGLE_PRECISION")
 set(Mitsuba_Spectrum_Samples "SPECTRUM_SAMPLES=3")
-set(Mitsuba_SSE "MTS_SSE")
-set(Mitsuba_Has_Coherent_RT "MTS_HAS_COHERENT_RT")
 set(Mitsuba_Debug "MTS_DEBUG")
-set(Mitsuba_OpenEXR "OPENEXR_DLL")
+
+if(MSVC)
+    set(Mitsuba_OpenEXR "OPENEXR_DLL")
+    set(Mitsuba_SSE "MTS_SSE")
+    set(Mitsuba_Has_Coherent_RT "MTS_HAS_COHERENT_RT")
+    set(MITS_MSVC_DEBUG "DEBUG")
+    set(MITS_MSVC_CONSOLE "_CONSOLE")
+else()
+    # Intel Embree (required by MTS_HAS_COHERENT_RT) is not a vcpkg dependency and
+    # SSE intrinsics are not portable to Apple Silicon / non-x86 builds.
+    set(Mitsuba_OpenEXR "")
+    set(Mitsuba_SSE "")
+    set(Mitsuba_Has_Coherent_RT "")
+    set(MITS_MSVC_DEBUG "")
+    set(MITS_MSVC_CONSOLE "")
+endif()
 
 add_compile_definitions(
     ${Mitsuba_Float_Percision}
@@ -91,18 +127,39 @@ add_compile_definitions(
     MTS_HAS_LIBJPEG=1
     MTS_HAS_OPENEXR=1
     MTS_HAS_FFTW=1
-    DEBUG
-    _CONSOLE
+    ${MITS_MSVC_DEBUG}
+    ${MITS_MSVC_CONSOLE}
 )
 
+# --- OpenMP ---
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    if(MSVC)
+        add_compile_options(/openmp)
+    else()
+        add_compile_options(${OpenMP_CXX_FLAGS})
+    endif()
+    set(MITSUBA_OPENMP_LIBS ${OpenMP_CXX_LIBRARIES})
+else()
+    set(MITSUBA_OPENMP_LIBS "")
+endif()
+
 if(MSVC)
-    add_compile_options(/openmp)
     add_link_options(/FIXED:NO /SUBSYSTEM:CONSOLE /NODEFAULTLIB:LIBCMT /MANIFEST)
 endif()
 
 # --- Shared library lists ---
 # Subdirectory CMake files consume these variables when linking Mitsuba components.
-set(BASE_LIB_LIST ws2_32 Eigen3::Eigen)
+if(WIN32)
+    set(BASE_LIB_LIST ws2_32 psapi Eigen3::Eigen)
+    set(GL_LIB_LIST opengl32 glu32 GLEW::glew gdi32 user32)
+elseif(APPLE)
+    set(BASE_LIB_LIST Eigen3::Eigen)
+    set(GL_LIB_LIST "-framework OpenGL" "-framework Cocoa" "-framework IOKit" GLEW::glew)
+else()
+    set(BASE_LIB_LIST Eigen3::Eigen pthread)
+    set(GL_LIB_LIST GL GLEW::glew GLU X11)
+endif()
 set(QT_LIB_LIST Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Xml Qt5::Network Qt5::OpenGL Qt5::XmlPatterns)
 set(OPENEXR_LIB_LIST OpenEXR::OpenEXR)
 set(BOOST_LIB_LIST Boost::${PYTHON_VERSION_WITHOUT_DOT} Boost::filesystem Boost::thread)
@@ -110,7 +167,6 @@ set(JEPG_LIB_LIST libjpeg-turbo::jpeg)
 set(XERCES_LIB_LIST XercesC::XercesC)
 set(PNG_LIB_LIST PNG::PNG)
 set(FFTW_LIB_LIST FFTW3::fftw3f FFTW3::fftw3)
-set(GL_LIB_LIST opengl32 glu32 GLEW::glew gdi32 user32)
 
 
 # --- Core targets ---
@@ -124,7 +180,11 @@ add_subdirectory(src/mitsuba)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
-add_subdirectory(src/mtsgui)
+# The Qt previewer depends on the now-defunct BWToolkitFramework on macOS, so
+# only build it on platforms where we know it works (Windows + Linux).
+if(NOT APPLE)
+    add_subdirectory(src/mtsgui)
+endif()
 set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC OFF)
 set(CMAKE_AUTOUIC OFF)
@@ -141,6 +201,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${MITSUBA_PLUGIN_BIN_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${MITSUBA_PLUGIN_BIN_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${MITSUBA_PLUGIN_BIN_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${MITSUBA_PLUGIN_BIN_DIR})
+# On macOS/Linux, add_library(SHARED) emits to LIBRARY_OUTPUT_DIRECTORY, not RUNTIME.
+if(NOT WIN32)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MITSUBA_PLUGIN_BIN_DIR})
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MITSUBA_PLUGIN_BIN_DIR})
+    # Match the original SCons build (SHLIBPREFIX='') so plugin files are
+    # named 'foo.dylib' rather than 'libfoo.dylib'. Mitsuba's PluginManager
+    # resolves plugins by short name without a 'lib' prefix.
+    set(CMAKE_SHARED_LIBRARY_PREFIX "")
+endif()
 add_subdirectory(src/utils)
 add_subdirectory(src/bsdfs)
 add_subdirectory(src/phase)

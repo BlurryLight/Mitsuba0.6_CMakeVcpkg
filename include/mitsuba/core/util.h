@@ -211,6 +211,19 @@ static FINLINE uint64_t rdtsc(void) {
     return static_cast<uint64_t>((tv.tv_sec + tv.tv_usec * 1e-6) * 1.5e9);
 #endif
 }
+#elif defined(__aarch64__) || defined(__arm64__)
+static FINLINE uint64_t rdtsc(void) {
+    // Apple Silicon and other 64-bit ARM: use the virtual counter.
+    uint64_t vct;
+#if defined(__APPLE__)
+    // Apple platforms: the vct is accessible in user mode.
+    __asm__ __volatile__ ("mrs %0, cntvct_el0" : "=r"(vct));
+#else
+    // Linux/aarch64: cntvct_el0 requires EL0 access enable (typically available).
+    __asm__ __volatile__ ("mrs %0, cntvct_el0" : "=r"(vct));
+#endif
+    return vct;
+}
 #endif
 #elif defined(__MSVC__)
 static FINLINE __int64 rdtsc(void) {

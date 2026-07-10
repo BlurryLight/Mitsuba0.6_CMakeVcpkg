@@ -21,26 +21,22 @@
 
 MTS_NAMESPACE_BEGIN
 
-static pthread_key_t __mts_autorelease_key;
 static bool __mts_cocoa_initialized = false;
 
 void __mts_autorelease_init() {
-    pthread_key_create(&__mts_autorelease_key, NULL);
+    /* No-op: modern macOS ARC handles autorelease automatically. */
 }
 
 void __mts_autorelease_shutdown() {
-    pthread_key_delete(__mts_autorelease_key);
+    /* No-op: modern macOS ARC handles autorelease automatically. */
 }
 
 void __mts_autorelease_begin() {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    pthread_setspecific(__mts_autorelease_key, pool);
+    /* No-op: modern macOS ARC handles autorelease automatically. */
 }
 
 void __mts_autorelease_end() {
-    NSAutoreleasePool *pool =
-        static_cast<NSAutoreleasePool *>(pthread_getspecific(__mts_autorelease_key));
-    [pool release];
+    /* No-op: modern macOS ARC handles autorelease automatically. */
 }
 
 void __mts_chdir_to_bundlepath() {

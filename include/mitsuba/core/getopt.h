@@ -20,10 +20,10 @@
 #pragma once
 
 #if !defined(MTS_EXPORT_CORE)
-    #if MTS_BUILD_MODULE == MTS_MODULE_CORE
+    #if defined(_MSC_VER)
         #define MTS_EXPORT_CORE __declspec(dllexport)
     #else
-        #define MTS_EXPORT_CORE __declspec(dllimport)
+        #define MTS_EXPORT_CORE __attribute__((visibility("default")))
     #endif
 #endif
 
