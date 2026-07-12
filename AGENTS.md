@@ -82,11 +82,9 @@ The CI also runs a render smoke test (create XML scene, render 32×32, verify ou
 ## Critical quirks
 
 - **Plugin naming**: On Linux/macOS, `CMAKE_SHARED_LIBRARY_PREFIX` is set to **empty** so plugins are `foo.so` not `libfoo.so`. The Mitsuba PluginManager resolves plugins by short name. Do not change this.
-- **`MTS_DEBUG` is always defined** in both Debug and Release builds (see `target_compile_definitions` in root CMakeLists.txt).
 - **No code generation** step exists. Qt AUTOMOC/AUTORCC/AUTOUIC run automatically as part of the CMake build for `mtsgui` only.
 - **`dependencies/CMakeLists.txt`** is a legacy self-build script with hardcoded proxy settings. It is **not used** by the main build. Ignore it.
 - `MTS_HAS_COHERENT_RT` is disabled everywhere (no Intel Embree).
-- `MTS_SSE` is enabled only on MSVC x86.
 - OpenMP may fail on macOS; single-threaded fallback.
 - `mtsimport` is skipped on MSYS2 (collada-dom CMake config conflicts with Boost).
 - `mtsgui` is skipped on macOS (BWToolkitFramework is defunct).
