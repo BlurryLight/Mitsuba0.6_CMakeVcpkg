@@ -20,7 +20,11 @@
 #if defined(__OSX__)
 #include <OpenGL/glew.h>
 #elif defined(__WINDOWS__)
+
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+
 #include <windows.h>
 #include <GL/glew.h>
 #include <gl/GLU.h>

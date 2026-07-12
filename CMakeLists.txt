@@ -30,6 +30,13 @@ if(APPLE)
     add_compile_options(-Wno-deprecated-declarations -Wno-unknown-pragmas)
 endif()
 
+# Silence deprecation warnings from third-party libraries and older APIs.
+if(MSVC)
+    add_compile_options(/wd4996)
+else()
+    add_compile_options(-Wno-deprecated-declarations)
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(MITSUBA_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})

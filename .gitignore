@@ -60,3 +60,6 @@ CMakeFiles/
 CMakeCache.txt
 build/
 compile_commands.json
+
+# Codegraph index
+.codegraph/
