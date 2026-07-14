@@ -44,11 +44,7 @@
 #include <pwd.h>
 #endif
 
-#if defined(__OSX__)
-#include "macos/previewsettingsdlg_cocoa.h"
-#else
 #include "previewsettingsdlg.h"
-#endif
 
 extern bool create_symlinks();
 
@@ -58,10 +54,6 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent), ui(new Ui::MainWindow),
     m_networkReply(NULL), m_activeWindowHack(false) {
     Logger *logger = Thread::getThread()->getLogger();
-
-#if defined(__OSX__)
-    m_previewSettings = NULL;
-#endif
 
     QSettings settings;
     logger->setLogLevel((ELogLevel) settings.value("verbosity", EDebug).toInt());
@@ -875,12 +867,7 @@ void MainWindow::updateUI() {
     ui->actionFocusAll->setEnabled(isInactiveScene);
     ui->actionFocusSelected->setEnabled(isInactiveScene && ui->glView->hasSelection());
 
-#if !defined(__OSX__)
     ui->actionPreviewSettings->setEnabled(!slowFallback && hasTab);
-#else
-    bool isVisible = m_previewSettings != NULL && m_previewSettings->isVisible();
-    ui->actionPreviewSettings->setEnabled(hasTab && !isVisible && !slowFallback);
-#endif
 
     if (isRendering) {
         if (!m_progress->isVisible()) {
@@ -956,17 +943,9 @@ void MainWindow::on_tabBar_currentChanged(int index) {
     if (index != -1) {
         if (m_context[index] != m_lastTab) {
             ui->glView->setScene(m_context[index]);
-#if defined(__OSX__)
-            if (m_previewSettings)
-                m_previewSettings->setContext(m_context[index]);
-#endif
         }
     } else {
         ui->glView->setScene(NULL);
-#if defined(__OSX__)
-        if (m_previewSettings && m_previewSettings->isVisible())
-            m_previewSettings->hide();
-#endif
     }
     m_statusMessage = "";
     updateStatus();
@@ -1188,10 +1167,6 @@ bool MainWindow::isActive() {
         return true;
     else if (m_currentChild != NULL && m_currentChild->isActiveWindow())
         return true;
-#if defined(__OSX__)
-    if (m_previewSettings != NULL && m_previewSettings->isActiveWindow())
-        return true;
-#endif
     return false;
 }
 
@@ -1253,15 +1228,10 @@ void MainWindow::onRenderSettingsClose(int reason) {
             adjustSize();
         }
         scene->decRef();
-#if defined(__OSX__)
-        if (m_previewSettings)
-            m_previewSettings->setContext(context);
-#endif
     }
 }
 
 void MainWindow::on_actionPreviewSettings_triggered() {
-#if !defined(__OSX__)
     SceneContext *context = m_context[ui->tabBar->currentIndex()];
     PreviewSettingsDialog d(this, context, ui->glView->getRendererCapabilities());
     connect(&d, SIGNAL(pathLengthChanged(int)), ui->glView, SLOT(setPathLength(int)));
@@ -1290,30 +1260,6 @@ void MainWindow::on_actionPreviewSettings_triggered() {
     settings.setValue("preview_toneMappingMethod", context->toneMappingMethod);
     settings.setValue("preview_diffuseReceivers", context->diffuseReceivers);
     settings.setValue("preview_diffuseSources", context->diffuseSources);
-#else
-    if (!m_previewSettings) {
-        m_previewSettings = new PreviewSettingsDlg(this);
-        connect(m_previewSettings, SIGNAL(pathLengthChanged(int)), ui->glView, SLOT(setPathLength(int)));
-        connect(m_previewSettings, SIGNAL(clampingChanged(Float)), ui->glView, SLOT(setClamping(Float)));
-        connect(m_previewSettings, SIGNAL(shadowMapResolutionChanged(int)), ui->glView, SLOT(setShadowMapResolution(int)));
-        connect(m_previewSettings, SIGNAL(gammaChanged(bool, Float)), ui->glView, SLOT(setGamma(bool, Float)));
-        connect(m_previewSettings, SIGNAL(exposureChanged(Float)), ui->glView, SLOT(setExposure(Float)));
-        connect(m_previewSettings, SIGNAL(reinhardKeyChanged(Float)), ui->glView, SLOT(setReinhardKey(Float)));
-        connect(m_previewSettings, SIGNAL(reinhardBurnChanged(Float)), ui->glView, SLOT(setReinhardBurn(Float)));
-        connect(m_previewSettings, SIGNAL(previewMethodChanged(EPreviewMethod)), ui->glView, SLOT(setPreviewMethod(EPreviewMethod)));
-        connect(m_previewSettings, SIGNAL(toneMappingMethodChanged(EToneMappingMethod)), ui->glView, SLOT(setToneMappingMethod(EToneMappingMethod)));
-        connect(m_previewSettings, SIGNAL(close()), this, SLOT(onPreviewSettingsClose()));
-        connect(m_previewSettings, SIGNAL(diffuseReceiversChanged(bool)), ui->glView, SLOT(setDiffuseReceivers(bool)));
-        connect(m_previewSettings, SIGNAL(diffuseSourcesChanged(bool)), ui->glView, SLOT(setDiffuseSources(bool)));
-        m_previewSettings->setPreviewEnabled(!ui->glView->isUsingSoftwareFallback());
-    }
-    SceneContext *ctx = NULL;
-    if (ui->tabBar->currentIndex() != -1)
-        ctx = m_context[ui->tabBar->currentIndex()];
-    m_previewSettings->setContext(ctx);
-    m_previewSettings->show();
-    ui->actionPreviewSettings->setEnabled(false);
-#endif
 }
 
 void MainWindow::onPreviewSettingsClose() {

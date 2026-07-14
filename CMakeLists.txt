@@ -231,11 +231,7 @@ add_subdirectory(src/converter)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
-# The Qt previewer depends on the now-defunct BWToolkitFramework on macOS, so
-# only build it on platforms where we know it works (Windows + Linux).
-if(NOT APPLE)
-    add_subdirectory(src/mtsgui)
-endif()
+add_subdirectory(src/mtsgui)
 set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC OFF)
 set(CMAKE_AUTOUIC OFF)

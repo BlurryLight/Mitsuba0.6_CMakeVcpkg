@@ -36,7 +36,6 @@ namespace Ui {
 class QConsoleAppender;
 class ServerWidget;
 class GLWidget;
-class PreviewSettingsDlg;
 
 /**
  * Captures progress notifications from mitsuba and helps to transfer
@@ -237,9 +236,7 @@ private:
     int m_contextIndex;
     SceneContext *m_lastTab;
     std::map<std::string, std::string, SimpleStringOrdering> m_parameters;
-#if defined(__OSX__)
-    PreviewSettingsDlg *m_previewSettings;
-#endif
+
     QWidget *m_currentChild;
 };
 

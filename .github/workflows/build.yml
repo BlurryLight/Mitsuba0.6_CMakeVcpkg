@@ -75,7 +75,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -e
-          cat > /tmp/ci_scene.xml <<'XML'
+          cat > ci_scene.xml <<'XML'
           <scene version="0.6.0">
               <integrator type="path"><integer name="maxDepth" value="2"/></integrator>
               <sensor type="perspective">
@@ -97,16 +97,16 @@ jobs:
               </shape>
           </scene>
           XML
-          ./build/cmake-msys2-release/bin/mitsuba.exe -o /tmp/ci_render.png -q /tmp/ci_scene.xml
-          test -s /tmp/ci_render.png
-          magic=$(head -c 8 /tmp/ci_render.png | od -An -tx1 | tr -d ' \n')
+          ./build/cmake-msys2-release/bin/mitsuba.exe -o ci_render.png -q ci_scene.xml
+          test -s ci_render.png
+          magic=$(head -c 8 ci_render.png | od -An -tx1 | tr -d ' \n')
           test "$magic" = "89504e470d0a1a0a"
 
       - name: Upload render artefact
         uses: actions/upload-artifact@v4
         with:
           name: windows-render
-          path: /tmp/ci_render.png
+          path: ci_render.png
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------

@@ -408,62 +408,73 @@ void NSGLDevice::init(Device *other) {
     /* Protect the event queue */
     m_mutex = new Mutex();
 
-    /* Create the device window */
-    m_window = [[NSWindow alloc] initWithContentRect: contentRect
-        styleMask: NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
-        backing: NSBackingStoreBuffered defer: NO];
-    if (m_window == nil)
-        Log(EError, "Could not create window");
+    if (other) {
+        /* Child device (e.g. background PreviewThread): no NSWindow or NSView
+           is needed. The NSGLRenderer creates its own NSOpenGLContext that
+           shares with the parent renderer's context, so we skip all Cocoa
+           window/view/pixel-format creation here. */
+        m_fmt = nil;
+        m_window = nil;
+        m_view = nil;
+    } else {
+        /* Create the device window */
+        m_window = [[NSWindow alloc] initWithContentRect: contentRect
+            styleMask: NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
+            backing: NSBackingStoreBuffered defer: NO];
+        if (m_window == nil)
+            Log(EError, "Could not create window");
 
-    if (m_center)
-        [m_window center];
+        if (m_center)
+            [m_window center];
 
-    /* Create a sub-view as drawing destination and in order to catch events */
-    m_view = [[CustomView alloc] initWithFrame: contentRect];
-    if (m_view == nil)
-        Log(EError, "Could not create view");
+        /* Create a sub-view as drawing destination and in order to catch events */
+        m_view = [[CustomView alloc] initWithFrame: contentRect];
+        if (m_view == nil)
+            Log(EError, "Could not create view");
 
-    [m_view setDevice: this];
-    [[m_window contentView] addSubview: m_view];
-    [m_window setDelegate: m_view];
-    [m_window setAcceptsMouseMovedEvents: YES];
+        [m_view setDevice: this];
+        [[m_window contentView] addSubview: m_view];
+        [m_window setDelegate: m_view];
+        [m_window setAcceptsMouseMovedEvents: YES];
 
-    /* Pixel format setup */
-    AssertEx(m_redBits == m_blueBits || m_redBits == m_greenBits, "NSGL does not support individual color depths");
+        /* Pixel format setup */
+        AssertEx(m_redBits == m_blueBits || m_redBits == m_greenBits, "NSGL does not support individual color depths");
 
-    attribs[i++] = NSOpenGLPFAColorSize;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) m_redBits;
+        attribs[i++] = NSOpenGLPFAColorSize;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) m_redBits;
 
-    attribs[i++] = NSOpenGLPFAAlphaSize;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) m_alphaBits;
+        attribs[i++] = NSOpenGLPFAAlphaSize;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) m_alphaBits;
 
-    attribs[i++] = NSOpenGLPFADepthSize;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) m_depthBits;
+        attribs[i++] = NSOpenGLPFADepthSize;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) m_depthBits;
 
-    attribs[i++] = NSOpenGLPFAStencilSize;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) m_stencilBits;
+        attribs[i++] = NSOpenGLPFAStencilSize;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) m_stencilBits;
 
-    if (m_doubleBuffer) {
-        attribs[i++] = NSOpenGLPFADoubleBuffer;
+        if (m_doubleBuffer) {
+            attribs[i++] = NSOpenGLPFADoubleBuffer;
+        }
+
+        if (m_fsaa > 1) {
+            attribs[i++] = NSOpenGLPFASampleBuffers; attribs[i++] = (NSOpenGLPixelFormatAttribute) 1;
+            attribs[i++] = NSOpenGLPFASamples; attribs[i++] = (NSOpenGLPixelFormatAttribute) m_fsaa;
+        }
+
+        attribs[i++] = NSOpenGLPFANoRecovery; // Never switch renderers
+        attribs[i++] = NSOpenGLPFAWindow;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) 0;
+        attribs[i++] = (NSOpenGLPixelFormatAttribute) 0;
+
+        m_fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes: attribs];
+
+        if (m_fmt == nil)
+            Log(EError, "Could not create OpenGL pixel format!");
+
+        setTitle(m_title);
     }
-
-    if (m_fsaa > 1) {
-        attribs[i++] = NSOpenGLPFASampleBuffers; attribs[i++] = (NSOpenGLPixelFormatAttribute) 1;
-        attribs[i++] = NSOpenGLPFASamples; attribs[i++] = (NSOpenGLPixelFormatAttribute) m_fsaa;
-    }
-
-    attribs[i++] = NSOpenGLPFANoRecovery; // Never switch renderers
-    attribs[i++] = NSOpenGLPFAWindow;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) 0;
-    attribs[i++] = (NSOpenGLPixelFormatAttribute) 0;
-
-    m_fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes: attribs];
-
-    if (m_fmt == nil)
-        Log(EError, "Could not create OpenGL pixel format!");
 
     m_initialized = true;
-    setTitle(m_title);
 }
 
 void NSGLDevice::shutdown() {
@@ -489,8 +500,10 @@ void NSGLDevice::setTitle(const std::string &title) {
 
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
-    NSString *string = [NSString stringWithUTF8String: finalTitle.c_str()];
-    [m_window setTitle: string];
+    if (m_window) {
+        NSString *string = [NSString stringWithUTF8String: finalTitle.c_str()];
+        [m_window setTitle: string];
+    }
     Device::setTitle(title);
 
     [pool release];
@@ -499,10 +512,12 @@ void NSGLDevice::setTitle(const std::string &title) {
 void NSGLDevice::setPosition(const Point2i &position) {
     Assert(m_initialized);
 
-    NSPoint point = NSMakePoint(position.x,
-        CGDisplayPixelsHigh(kCGDirectMainDisplay) - position.y);
+    if (m_window) {
+        NSPoint point = NSMakePoint(position.x,
+            CGDisplayPixelsHigh(kCGDirectMainDisplay) - position.y);
 
-    [m_window setFrameTopLeftPoint: point];
+        [m_window setFrameTopLeftPoint: point];
+    }
     Device::setPosition(position);
 }
 
@@ -510,10 +525,12 @@ void NSGLDevice::setVisible(bool visible) {
     Assert(m_initialized);
 
     if (visible && !m_visible) {
-        [m_window makeKeyAndOrderFront: nil];
+        if (m_window)
+            [m_window makeKeyAndOrderFront: nil];
         m_visible = true;
     } else if (!visible && m_visible) {
-        [m_window orderOut: nil];
+        if (m_window)
+            [m_window orderOut: nil];
         m_visible = false;
     }
 }
@@ -591,6 +608,8 @@ void NSGLDevice::processEvents() {
 }
 
 bool NSGLDevice::isMouseInWindow() {
+    if (!m_window)
+        return false;
     return m_fullscreen || NSPointInRect([m_window mouseLocationOutsideOfEventStream], [m_view frame]);
 }
 
